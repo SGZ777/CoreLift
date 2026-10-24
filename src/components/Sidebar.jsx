@@ -1,5 +1,5 @@
 const ITENS = [
-  ['bi-grid-1x2', 'Dashboard'], ['bi-arrow-down-up', 'Elevadores'], ['bi-activity', 'Monitoramento'], ['bi-bell', 'Alertas'], ['bi-wrench-adjustable', 'Manutenções'],
+  ['bi-grid-1x2', 'Dashboard'], ['bi-wrench-adjustable', 'Manutenções'] , ['bi bi-person-circle me-2', 'Usuário'],
 ]
 
 export default function Sidebar() {
@@ -12,14 +12,12 @@ export default function Sidebar() {
       <div className="offcanvas-body flex-column p-3">
         <div className="text-center mb-4 d-none d-lg-block">
            <img src="/CoreLift.png" alt="CoreLift" className="img-fluid" />
-          <small className="text-secondary">Monitoramento de Elevadores Automotivos</small>
         </div>
         <ul className="nav nav-pills flex-column gap-1 list-unstyled">
           {ITENS.map(([ic, t], i) => (
             <li key={t}><a className={'nav-link' + (i === 0 ? ' active' : '')} href="#"><i className={`bi ${ic} me-2`} />{t}</a></li>
           ))}
         </ul>
-        <div className="mt-auto pt-3 border-top border-secondary-subtle text-secondary small"><i className="bi bi-person-circle me-2" />Usuário</div>
       </div>
     </aside>
   )
