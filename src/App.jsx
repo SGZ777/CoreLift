@@ -1,13 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import { useRegistros } from './hooks/useRegistros'
 import { LIM, PER, TIPOS, avg, dt, f, hm } from './lib'
 import Sidebar from './components/Sidebar'
 import Chart from './components/Chart'
+import Pages from './components/Pages'
 import { Alertas, Indicadores, Kpis, TiposLista } from './components/Panels'
 
 const Card = ({ titulo, children, className = '' }) => (
   <div className={`card h-100 shadow-sm ${className}`}><div className="card-body"><h2 className="h6 fw-bold mb-3">{titulo}</h2>{children}</div></div>
 )
+
+const lerServicos = () => {
+  try { return JSON.parse(localStorage.getItem('corelift-servicos') || '{}') } catch { return {} }
+}
 
 export default function App() {
   const { dados, carregando, erro } = useRegistros()
@@ -15,9 +22,42 @@ export default function App() {
   const [tur, setTur] = useState(-1)
   const [tipo, setTipo] = useState(-1)
   const [met, setMet] = useState('temp')
+  const [pagina, setPagina] = useState('Dashboard')
+  const [exportando, setExportando] = useState(false)
+  const [servicos, setServicos] = useState(lerServicos)
+  const dashboardRef = useRef(null)
   const [tema, setTema] = useState(() => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
   useEffect(() => { document.documentElement.dataset.bsTheme = tema }, [tema])
   const alternaTema = () => setTema(t => (t === 'dark' ? 'light' : 'dark'))
+  const atualizarServico = (tipo, atualizacao) => {
+    setServicos(anterior => {
+      const novos = { ...anterior, [tipo]: { ...anterior[tipo], ...atualizacao } }
+      localStorage.setItem('corelift-servicos', JSON.stringify(novos))
+      return novos
+    })
+  }
+  const baixarPdf = async () => {
+    if (!dashboardRef.current || exportando) return
+    setExportando(true)
+    try {
+      const canvas = await html2canvas(dashboardRef.current, { scale: 2, backgroundColor: tema === 'dark' ? '#212529' : '#f8f9fa', useCORS: true, ignoreElements: el => el.classList?.contains('pdf-hide') })
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const margem = 10
+      const largura = pdf.internal.pageSize.getWidth() - margem * 2
+      const alturaImagem = canvas.height * largura / canvas.width
+      const alturaUtil = pdf.internal.pageSize.getHeight() - margem * 2
+      const imagem = canvas.toDataURL('image/jpeg', 0.95)
+      for (let deslocamento = 0, paginaPdf = 0; deslocamento < alturaImagem; deslocamento += alturaUtil, paginaPdf++) {
+        if (paginaPdf) pdf.addPage()
+        pdf.addImage(imagem, 'JPEG', margem, margem - deslocamento, largura, alturaImagem)
+      }
+      pdf.save(`corelift-dashboard-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } catch (e) {
+      console.error('Não foi possível gerar o PDF:', e)
+    } finally {
+      setExportando(false)
+    }
+  }
 
   const end = dados.length ? dados[dados.length - 1].ts : 0
   const base = useMemo(() => dados.filter(r => r.ts > end - PER[per][1] && (tur < 0 || r.turno === tur)), [dados, end, per, tur])
@@ -33,8 +73,9 @@ export default function App() {
       </nav>
 
       <div className="d-lg-flex">
-        <Sidebar />
-        <main className="flex-grow-1 min-w-0 p-3 p-lg-4">
+        <Sidebar pagina={pagina} onNavigate={setPagina} />
+        <main ref={pagina === 'Dashboard' ? dashboardRef : null} className="flex-grow-1 min-w-0 p-3 p-lg-4">
+          {pagina === 'Dashboard' ? <>
           <header className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
             <div>
               <h1 className="h3 fw-bold mb-0">Dashboard</h1>
@@ -42,11 +83,12 @@ export default function App() {
             </div>
             <div className="d-flex align-items-center gap-2">
               {end > 0 && <span className="badge text-bg-light border fw-medium py-2 px-3">Dados de {dt(dados[0].ts)} a {dt(end)}/{new Date(end * 1000).getUTCFullYear()}</span>}
-              <button className="btn btn-outline-secondary btn-sm d-none d-lg-inline-flex" onClick={alternaTema} aria-label="Alternar tema"><i className="bi bi-circle-half" /></button>
+              <button className="btn btn-primary btn-sm pdf-hide" onClick={baixarPdf} disabled={carregando || !!erro || !dados.length || exportando}><i className={`bi ${exportando ? 'bi-hourglass-split' : 'bi-file-earmark-pdf'} me-1`} />{exportando ? 'Gerando PDF…' : 'Baixar PDF'}</button>
+              <button className="btn btn-outline-secondary btn-sm d-none d-lg-inline-flex pdf-hide" onClick={alternaTema} aria-label="Alternar tema"><i className="bi bi-circle-half" /></button>
             </div>
           </header>
 
-          {carregando && <div className="text-center py-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Carregando…</span></div></div>}
+          {carregando && <section className="card shadow-sm loading-state" role="status" aria-live="polite"><div className="card-body text-center py-5"><div className="spinner-border text-primary mb-3" style={{ width: '2.75rem', height: '2.75rem' }} aria-hidden="true" /><h2 className="h6 fw-bold mb-1">Carregando dados</h2><p className="text-secondary small mb-0">Estamos buscando as informações operacionais da sua oficina.</p><span className="visually-hidden">Aguarde enquanto os dados são carregados.</span></div></section>}
           {erro && <div className="alert alert-danger">Não foi possível carregar os registros ({erro}).</div>}
           {!carregando && !erro && !dados.length && <div className="alert alert-warning">Nenhum registro encontrado.</div>}
 
@@ -99,11 +141,12 @@ export default function App() {
               </section>
 
               <section className="row g-3">
-                <div className="col-12 col-xl-7"><Card titulo="Alertas ativos"><Alertas R={R} /></Card></div>
+                <div className="col-12 col-xl-7"><Card titulo="Alertas ativos"><Alertas R={R} servicos={servicos} /></Card></div>
                 <div className="col-12 col-xl-5"><Card titulo="Indicadores e manutenção"><Indicadores R={R} /></Card></div>
               </section>
             </>
           )}
+          </> : <Pages pagina={pagina} dados={dados} servicos={servicos} onSolicitar={tipo => atualizarServico(tipo, { solicitadoEm: Date.now() })} onConsertado={tipo => atualizarServico(tipo, { resolvidoEm: Date.now() })} />}
         </main>
       </div>
     </>

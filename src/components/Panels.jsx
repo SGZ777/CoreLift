@@ -56,8 +56,12 @@ export function TiposLista({ base, tipo, onSelect }) {
   )
 }
 
-export function Alertas({ R }) {
-  const A = R.filter(r => r.status > 0).sort((a, b) => b.status - a.status || b.ts - a.ts).slice(0, 6)
+export function Alertas({ R, servicos = {} }) {
+  const recentes = R.reduce((porTipo, registro) => {
+    if (!porTipo[registro.tipo] || registro.ts > porTipo[registro.tipo].ts) porTipo[registro.tipo] = registro
+    return porTipo
+  }, {})
+  const A = Object.values(recentes).filter(r => r.status > 0 && r.ts * 1000 > (servicos[r.tipo]?.resolvidoEm || 0)).sort((a, b) => b.status - a.status || b.ts - a.ts).slice(0, 6)
   if (!A.length) return <div className="text-secondary py-3">Nenhum alerta neste filtro.</div>
   return (
     <>
